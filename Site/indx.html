@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLARENCIO Connect</title>
+<style>
+  :root { --bg:#0b191d; --panel:#11282d; --line:#27535a; --txt:#f0fffb; --dim:#95b8b9; --green:#2bc980; --blue:#67d7f0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px system-ui,-apple-system,Arial,sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .card { width:100%; max-width:540px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:26px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  header { display:flex; align-items:center; gap:12px; margin-bottom:22px; }
+  .logo { width:42px; height:42px; border-radius:13px; background:linear-gradient(135deg,var(--green),var(--blue)); display:grid; place-items:center; color:#062a26; font-weight:900; font-size:22px; }
+  h1 { font-size:18px; margin:0; }
+  small { color:var(--dim); }
+  section { border:1px solid var(--line); border-radius:14px; padding:16px; background:#0d1f23; margin-bottom:14px; }
+  label { display:block; font-size:11px; font-weight:700; letter-spacing:.6px; color:var(--dim); text-transform:uppercase; margin-bottom:7px; }
+  input, textarea { width:100%; padding:11px 12px; border-radius:10px; background:#091d22; color:#fff; border:1px solid var(--line); outline:none; font-size:14px; font-family:inherit; }
+  input:focus, textarea:focus { border-color:var(--blue); }
+  textarea { resize:vertical; min-height:80px; font-family:ui-monospace,monospace; font-size:12px; }
+  button { width:100%; border:0; border-radius:10px; padding:12px; background:linear-gradient(100deg,var(--green),var(--blue)); color:#062523; font-weight:800; cursor:pointer; margin-top:10px; font-size:14px; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.sec { background:#1a3439; color:var(--txt); border:1px solid var(--line); }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .status { display:flex; align-items:center; gap:8px; font-size:13px; margin-top:10px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#444; }
+  .dot.on { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .dot.off { background:#c0392b; }
+  .msg { font-size:12px; color:var(--dim); margin-top:8px; min-height:16px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end; }
+  .grid2 button { margin-top:0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <header>
+    <div class="logo">C</div>
+    <div>
+      <h1>CLARENCIO Connect</h1>
+      <small>Painel de controle remoto</small>
+    </div>
+  </header>
+
+  <section>
+    <label for="code">Código de pareamento</label>
+    <input id="code" placeholder="A1B2C3D4" maxlength="8" autocomplete="off" spellcheck="false">
+    <div class="row" style="margin-top:10px;">
+      <button class="sec" id="check">Verificar</button>
+      <button class="sec" id="save">Salvar</button>
+    </div>
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Sem código</span>
+    </div>
+  </section>
+
+  <section>
+    <label>Enviar Robux (simulado)</label>
+    <input id="amount" type="number" min="1" max="1000000" value="500">
+
+    <div class="grid2" style="margin-top:10px;">
+      <input id="nick" placeholder="username">
+      <button id="sendOne">Enviar 1</button>
+    </div>
+
+    <label style="margin-top:14px;">Fila de nicks (um por linha)</label>
+    <textarea id="queue" placeholder="nick1&#10;nick2&#10;nick3"></textarea>
+
+    <button id="startQueue">▶ Iniciar fila</button>
+    <div class="row" style="margin-top:10px;">
+      <button class="sec" id="stop">■ Parar</button>
+      <button class="sec" id="balance">Definir saldo</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const state = { code: localStorage.getItem('cl_code') || '' };
+
+  const api = (path, body, method = 'POST') =>
+    fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    }).then((r) => r.json()).then((d) => {
+      if (d.error) throw new Error(d.error);
+      return d;
+    });
+
+  const setStatus = (cls, text) => {
+    $('dot').className = 'dot ' + cls;
+    $('statusText').textContent = text;
+  };
+
+  const flash = (text) => {
+    $('msg').textContent = text;
+    setTimeout(() => { if ($('msg').textContent === text) $('msg').textContent = ''; }, 2500);
+  };
+
+  const checkConnection = async () => {
+    if (!state.code) { setStatus('', 'Sem código'); return; }
+    try {
+      const r = await fetch('/api/status/' + state.code).then((r) => r.json());
+      if (r.online) setStatus('on', 'Conectada · ' + Math.round(r.ageMs / 1000) + 's atrás');
+      else setStatus('off', 'Extensão offline');
+    } catch (_) {
+      setStatus('off', 'Servidor inacessível');
+    }
+  };
+
+  $('code').value = state.code;
+
+  $('save').onclick = () => {
+    state.code = $('code').value.trim().toUpperCase();
+    localStorage.setItem('cl_code', state.code);
+    flash('Salvo.');
+    checkConnection();
+  };
+
+  $('check').onclick = checkConnection;
+
+  const sendCommand = async (payload) => {
+    if (!state.code) throw new Error('Sem código');
+    await api('/api/command/' + state.code, payload);
+  };
+
+  $('sendOne').onclick = async () => {
+    try {
+      const nick = $('nick').value.trim();
+      if (!/^[A-Za-z0-9_]{3,20}$/.test(nick)) return flash('Nick inválido.');
+      await sendCommand({ type: 'manual', nick, amount: Number($('amount').value) || 500 });
+      flash('Enviado: ' + nick);
+    } catch (e) { flash('Erro: ' + e.message); }
+  };
+
+  $('startQueue').onclick = async () => {
+    try {
+      const nicks = $('queue').value.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+      if (!nicks.length) return flash('Lista vazia.');
+      await sendCommand({
+        type: 'start',
+        nicks,
+        amount: Number($('amount').value) || 500,
+        typingMs: 95,
+        delayMs: 1500,
+      });
+      flash('Fila enviada: ' + nicks.length + ' nicks.');
+    } catch (e) { flash('Erro: ' + e.message); }
+  };
+
+  $('stop').onclick = async () => {
+    try { await sendCommand({ type: 'stop' }); flash('Stop enviado.'); }
+    catch (e) { flash('Erro: ' + e.message); }
+  };
+
+  $('balance').onclick = async () => {
+    try {
+      await sendCommand({ type: 'balance', amount: Number($('amount').value) || 0 });
+      flash('Saldo atualizado.');
+    } catch (e) { flash('Erro: ' + e.message); }
+  };
+
+  setInterval(checkConnection, 3000);
+  checkConnection();
+})();
+</script>
+</body>
+</html>
